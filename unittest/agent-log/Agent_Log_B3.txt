@@ -1,0 +1,123 @@
+# NT521 LAB 01 – B.3 AI CODING AGENT LOG
+
+## 1. Environment / Branch
+
+- Branch: `agent`
+- Working directory: `/home/chis/Desktop/NT521-Lab01-Nhom09/unittest`
+- Repository root observed: `/home/chis/Desktop/NT521-Lab01-Nhom09`
+
+## 2. Initial inspection
+
+- Các file đã kiểm tra: `recursive_json_search.py`, `test_json_search.py`, `test_data.py`, `policy.py`; danh sách file với `rg --files`; branch và Git status.
+- Git status ban đầu (lần gọi shell đọc thành công): `M recursive_json_search.py`, `M test_json_search.py`, `?? __pycache__/`.
+- Hai source file đã có thay đổi trước khi tôi bắt đầu. Diff ban đầu cho thấy đó là nội dung được thêm vào từ baseline repository vốn chỉ có dòng placeholder. Không có commit nào trong phiên này.
+- Trạng thái source ban đầu: `json_search(key, input_object)` gọi đệ quy nhưng bỏ qua return value; `issueSummary` sâu trong JSON do đó không được trả về. `policy.py` đã chứa POLICY với ba mục như yêu cầu và không cần sửa.
+
+## 3. Prompt / Task
+
+Được yêu cầu phát triển `json_search()` cho bài B.3: sửa recursive traversal nếu cần, giữ ba baseline tests, triển khai RBAC sử dụng `policy.py`, thêm tối thiểu ba security tests, chạy kiểm thử, tự review diff/status, không sửa policy nếu không cần, không commit/push. Trong yêu cầu tiếp theo, được yêu cầu chỉ tạo Agent Log phản ánh chính xác các thao tác của phiên, không sửa source, và hiển thị nội dung log cùng đường dẫn.
+
+## 4. Files inspected
+
+- `recursive_json_search.py` — đọc nội dung ban đầu, diff ban đầu, và đọc lại sau khi sửa.
+- `test_json_search.py` — đọc nội dung ban đầu, diff ban đầu, và đọc lại sau lần thêm test đầu tiên không thành công.
+- `test_data.py` — đọc; xác nhận dữ liệu mẫu có `issueSummary`, `managementIpAddress`, `apiKey` lồng nhau.
+- `policy.py` — đọc; xác nhận POLICY là `apiKey: [admin]`, `managementIpAddress: [admin, operator]`, `issueSummary: [admin, operator, viewer]`.
+- Danh sách file trong thư mục được liệt kê bằng `rg --files`; có `security-requirements.md`, nhưng nội dung file này không được đọc.
+- `.git` được dùng gián tiếp qua các lệnh Git; không đọc nội dung file trong `.git`.
+
+## 5. Changes performed
+
+- `recursive_json_search.py`: thay implementation bằng hàm nhận `role=None`, traversal đệ quy dict/list có gộp trả về, tra POLICY khi role được cung cấp, imports tương thích khi gọi từ thư mục hoặc package, và chỉ in mẫu khi chạy trực tiếp qua entry point.
+- `test_json_search.py`: giữ nguyên ba baseline test; thêm năm test RBAC (ba trường hợp bắt buộc và hai role được phép).
+- `policy.py`: Inspected – no changes.
+- `test_data.py`: Inspected – no changes.
+- Trong yêu cầu hiện tại, chỉ tạo file `agent-log/Agent_Log_B3.txt`; không chỉnh sửa source.
+
+## 6. Recursive JSON Search
+
+Ban đầu, hàm gọi `json_search(key, v)` / `json_search(key, item)` nhưng không dùng kết quả trả về, khiến kết quả sâu không được đưa vào `ret_val`. Implementation mới gọi `ret_val.extend(json_search(key, value, role))` cho child dict/list và tương tự cho các item dict/list trong list. `issueSummary` trong `test_data.py` được tìm thấy sau sửa. Kết quả recursive call có được gộp vào `ret_val`.
+
+## 7. RBAC / Security Policy
+
+- `policy.py`: đã đọc policy; không thay đổi.
+- Signature đổi từ `json_search(key, input_object)` sang `json_search(key, input_object, role=None)`.
+- Với `role=None`, bỏ qua kiểm tra policy và tìm kiếm theo hành vi cơ bản.
+- Khi có role, quyền được đọc từ `POLICY.get(key, [])`; nếu role không nằm trong danh sách thì trả `[]`. Key không có trong policy mặc định bị từ chối đối với role-based call.
+- Role được truyền cho mọi recursive call. Không hard-code danh sách quyền trong hàm.
+
+## 8. Unit Tests
+
+Ba baseline test được giữ nguyên:
+
+- `test_search_found`
+- `test_search_not_found`
+- `test_is_a_list`
+
+Năm test thêm:
+
+- `test_viewer_cannot_read_api_key`
+- `test_viewer_cannot_read_management_ip_address`
+- `test_viewer_can_read_issue_summary`
+- `test_admin_can_read_api_key`
+- `test_operator_can_read_management_ip_address`
+
+Các security test sử dụng `assertEqual(..., [])` hoặc `assertNotEqual(..., [])`.
+
+## 9. Commands Executed
+
+Các lệnh shell quan trọng thực sự chạy (đường dẫn làm việc là thư mục `unittest/`, trừ khi ghi khác):
+
+- `pwd && git branch --show-current && git status --short && rg --files -g 'recursive_json_search.py' -g 'test_json_search.py' -g 'test_data.py' -g 'policy.py' -g 'AGENTS.md'` — lần đầu thất bại trước khi shell chạy do lỗi sandbox `mountinfo path is not absolute`.
+- `pwd && git status --short` — thành công sau khi được phép chạy ngoài sandbox; xác nhận thư mục và trạng thái có hai file modified cùng `__pycache__/` untracked.
+- `git branch --show-current && git status --short && rg --files && sed -n '1,240p' recursive_json_search.py && sed -n '1,280p' test_json_search.py && sed -n '1,260p' test_data.py && sed -n '1,200p' policy.py && python3 -m unittest -v test_json_search` — đọc files và baseline; 1 test fail.
+- `git diff -- recursive_json_search.py test_json_search.py policy.py && python3 -m unittest -v test_json_search` — xem diff ban đầu và xác nhận baseline fail lặp lại.
+- Các lệnh `python3 -c ...` cập nhật `recursive_json_search.py`, gỡ escaping sai, và thêm security test vào `test_json_search.py`.
+- `sed -n '1,100p' recursive_json_search.py` và `cat test_json_search.py` — kiểm tra source sau chỉnh sửa.
+- `python3 -m unittest -v test_json_search` — chạy baseline sau sửa recursion và các lần chạy cả suite; lần đầu sau viết file có SyntaxError do escaping docstring, sau khi sửa có 3/3 baseline PASS; về sau 8/8 PASS.
+- `python3 recursive_json_search.py` — chạy entry point; in ra kết quả `issueSummary`.
+- `git status --short && git diff -- unittest/recursive_json_search.py unittest/test_json_search.py unittest/policy.py && python3 -m unittest -v test_json_search` — status hiển thị; diff rỗng vì các path truyền vào có tiền tố sai từ thư mục con; test 8/8 PASS.
+- `git rev-parse --show-toplevel && git diff -- recursive_json_search.py test_json_search.py policy.py && git status --short` — xác nhận root repository, xem đúng diff đầy đủ, và xác nhận status cuối của code.
+
+Không chạy đúng chuỗi `python3 -m unittest -v unittest/test_json_search.py`. Đã dùng lệnh tương đương từ thư mục `unittest/`: `python3 -m unittest -v test_json_search`. Không chạy một bộ unit test khác ngoài module test này.
+
+## 10. Test Results
+
+- Baseline ban đầu: `Ran 3 tests ... FAILED (failures=1)`. `test_search_found` FAIL với `AssertionError: False is not true`; `test_is_a_list` và `test_search_not_found` PASS.
+- Một lần chạy ngay sau lần ghi implementation đầu tiên lỗi `SyntaxError: unexpected character after line continuation character` do dấu escape ở docstring/entry point. Đã sửa lỗi cú pháp trước khi tiếp tục.
+- Baseline sau khi sửa cú pháp/recursion: 3 tests PASS (`OK`).
+- Sau khi thêm security tests: `Ran 8 tests ... OK` — cả 3 baseline và 5 RBAC test PASS.
+- Kết quả cuối cùng của `python3 -m unittest -v test_json_search`: 8 tests PASS, 0 FAIL.
+- `python3 recursive_json_search.py` in `[{'issueSummary': 'Network Device 10.10.20.82 Is Unreachable From Controller'}]`.
+
+## 11. Self Review
+
+- Đọc diff ban đầu trước khi thay đổi để nhận diện thay đổi đã có sẵn.
+- Chạy baseline trước khi sửa; kiểm tra traceback của test fail.
+- Chạy baseline sau sửa recursion trước khi tiếp tục.
+- Chạy toàn bộ test module sau khi thêm RBAC tests và chạy trực tiếp file implementation.
+- Thực hiện `git status --short` và `git diff` cuối. Lệnh diff với prefix `unittest/` chạy từ thư mục con nên không hiển thị; sau đó chạy diff với path tương đối repository chính xác và đã đọc đầy đủ diff.
+- Review xác nhận role được truyền recursive, unauthorized trả `[]`, authorized trả kết quả, policy giữ nguyên, baseline giữ nguyên, security tests có assertion. Không commit.
+
+## 12. Final State
+
+- Unit tests: 8 PASS / 0 FAIL lần chạy cuối.
+- Git status cuối được quan sát trước tạo log: `M recursive_json_search.py`, `M test_json_search.py`, `?? __pycache__/`.
+- Files modified trong phần code: `unittest/recursive_json_search.py`, `unittest/test_json_search.py`. Những file này đã có thay đổi trước khi phiên thao tác bắt đầu.
+- Files created bởi phiên thao tác: không xác nhận file source mới. `__pycache__/` đã hiện trong status ban đầu và được giữ nguyên. Theo yêu cầu hiện tại, file mới được tạo là `unittest/agent-log/Agent_Log_B3.txt`.
+- Commit status: không commit, không push.
+- Source status trong yêu cầu tạo log: không sửa source.
+
+## 13. Mapping to B.3
+
+- Kiểm tra cấu trúc, branch, status, bốn file được chỉ định: Đã thực hiện.
+- Baseline test: Đã thực hiện bằng command tương đương từ đúng thư mục; baseline ban đầu 2 PASS / 1 FAIL.
+- Sửa recursive search và giữ API cơ bản: Đã thực hiện.
+- Chạy lại baseline sau recursion và chạy module trực tiếp: Đã thực hiện.
+- Đọc `policy.py`, dùng POLICY, giữ policy: Đã thực hiện.
+- RBAC role parameter, recursive propagation, default deny với key ngoài policy: Đã thực hiện.
+- Ba security test bắt buộc và kiểm tra quyền admin/operator: Đã thực hiện.
+- Chạy toàn bộ test trong `test_json_search.py` cuối cùng: Đã thực hiện (8/8 PASS). Chạy toàn bộ test repository: Không thực hiện.
+- Self-review git status/diff: Đã thực hiện; một lần dùng sai prefix diff từ thư mục con, sau đó xem đúng diff.
+- Command test đúng nguyên văn `python3 -m unittest -v unittest/test_json_search.py`: Không thực hiện; đã chạy command tương đương `python3 -m unittest -v test_json_search` từ thư mục `unittest/`.
+- Git commit/push: Không thực hiện.
